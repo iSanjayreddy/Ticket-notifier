@@ -1,9 +1,9 @@
 import requests
 from datetime import datetime
 import os
-import json
 
-TARGET_DATE = "2026-04-11"
+# ================== CONFIG ==================
+DATES_TO_CHECK = ["2026-04-11", "2026-04-12"]   # Saturday + Sunday
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
@@ -17,55 +17,56 @@ HEADERS = {
 }
 
 def send_notification(message):
-    print("Sending to Telegram:", message[:200])
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
         try:
-            resp = requests.post(
+            requests.post(
                 f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
                 json={"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"},
                 timeout=10
             )
-            print(f"Telegram status: {resp.status_code}")
-        except Exception as e:
-            print(f"Telegram error: {e}")
+        except:
+            pass
+    print(message)
 
-print(f"🎟️ DEBUG CHECK for {TARGET_DATE}")
+print(f"🎟️ Starting District check for {DATES_TO_CHECK}")
 
-try:
-    params = {
-        "frmtid": "etarl9n_zj",
-        "fromdate": TARGET_DATE,
-        "slug": "project-hail-mary-movie-tickets-in-chennai-MV200953"
-    }
-    
-    r = requests.get(BASE_URL, params=params, headers=HEADERS, timeout=15)
-    print(f"HTTP Status: {r.status_code}")
-    data = r.json()
-    
-    # Print key parts for debugging
-    movies = data.get("pageProps", {}).get("initialState", {}).get("movies", {})
-    discovery = movies.get("discoveryResults", {})
-    sessions = movies.get("movieSessions", {})
-    
-    print(f"discoveryResults exists: {bool(discovery)}")
-    print(f"discovery.data exists: {bool(discovery.get('data'))}")
-    print(f"movieSessions exists: {bool(sessions)}")
-    print(f"movieSessions keys: {list(sessions.keys()) if isinstance(sessions, dict) else 'not dict'}")
-    
-    # Always send a status message
-    status = f"<b>DEBUG CHECK - {TARGET_DATE}</b>\n"
-    status += f"Discovery data: {'YES' if discovery.get('data') else 'NO'}\n"
-    status += f"Sessions: {'YES' if sessions and sessions != {} else 'NO'}\n"
-    status += f"Time: {datetime.now().strftime('%H:%M:%S')}"
-    
-    send_notification(status)
-    
-    if discovery.get("data") or (sessions and sessions != {}):
-        send_notification(f"<b>🎟️ IMAX ALERT - Shows detected on {TARGET_DATE}!</b>")
-    else:
-        send_notification("Still no shows loaded yet.")
+found_any = False
 
-except Exception as e:
-    send_notification(f"❌ Error: {str(e)[:300]}")
+for target_date in DATES_TO_CHECK:
+    try:
+        params = {
+            "frmtid": "etarl9n_zj",
+            "fromdate": target_date,
+            "slug": "project-hail-mary-movie-tickets-in-chennai-MV200953"
+        }
+        
+        r = requests.get(BASE_URL, params=params, headers=HEADERS, timeout=15)
+        data = r.json()
+        
+        movies = data.get("pageProps", {}).get("initialState", {}).get("movies", {})
+        discovery = movies.get("discoveryResults", {})
+        sessions = movies.get("movieSessions", {})
+        
+        has_shows = bool(discovery.get("data")) or bool(sessions and sessions != {})
+        
+        if has_shows:
+            send_notification(
+                f"<b>🎟️ PROJECT HAIL MARY TICKETS ARE NOW LIVE!</b>\n\n"
+                f"📅 Date: <b>{target_date}</b>\n"
+                f"📍 Chennai\n\n"
+                f"🚨 Go book IMAX immediately on District before they sell out!"
+            )
+            found_any = True
+        else:
+            print(f"[{datetime.now().strftime('%H:%M')}] No shows yet for {target_date}")
+            
+    except Exception as e:
+        print(f"Error checking {target_date}: {e}")
 
-print("Check finished.")
+# Final summary message
+if not found_any:
+    send_notification(f"[{datetime.now().strftime('%d-%m %H:%M')}] Still no tickets for 11th & 12th April... checking again in 5 min.")
+else:
+    send_notification("✅ Tickets found for one or more dates!")
+
+print("✅ Full check completed.")
