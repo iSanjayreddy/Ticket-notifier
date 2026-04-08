@@ -1,9 +1,9 @@
 import requests
 from datetime import datetime
 import os
+import json
 
-# ================== CONFIG ==================
-TARGET_DATE = "2026-04-11"          # ← Change this when you want to monitor another date
+TARGET_DATE = "2026-04-11"
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
@@ -17,18 +17,19 @@ HEADERS = {
 }
 
 def send_notification(message):
-    print(message)
+    print("Sending to Telegram:", message[:200])
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
         try:
-            requests.post(
+            resp = requests.post(
                 f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
                 json={"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"},
                 timeout=10
             )
+            print(f"Telegram status: {resp.status_code}")
         except Exception as e:
-            print(f"Telegram send error: {e}")
+            print(f"Telegram error: {e}")
 
-print(f"🎟️ Checking District for Project Hail Mary IMAX on {TARGET_DATE} (Chennai)")
+print(f"🎟️ DEBUG CHECK for {TARGET_DATE}")
 
 try:
     params = {
@@ -38,27 +39,33 @@ try:
     }
     
     r = requests.get(BASE_URL, params=params, headers=HEADERS, timeout=15)
-    r.raise_for_status()
+    print(f"HTTP Status: {r.status_code}")
     data = r.json()
     
+    # Print key parts for debugging
     movies = data.get("pageProps", {}).get("initialState", {}).get("movies", {})
     discovery = movies.get("discoveryResults", {})
     sessions = movies.get("movieSessions", {})
     
+    print(f"discoveryResults exists: {bool(discovery)}")
+    print(f"discovery.data exists: {bool(discovery.get('data'))}")
+    print(f"movieSessions exists: {bool(sessions)}")
+    print(f"movieSessions keys: {list(sessions.keys()) if isinstance(sessions, dict) else 'not dict'}")
+    
+    # Always send a status message
+    status = f"<b>DEBUG CHECK - {TARGET_DATE}</b>\n"
+    status += f"Discovery data: {'YES' if discovery.get('data') else 'NO'}\n"
+    status += f"Sessions: {'YES' if sessions and sessions != {} else 'NO'}\n"
+    status += f"Time: {datetime.now().strftime('%H:%M:%S')}"
+    
+    send_notification(status)
+    
     if discovery.get("data") or (sessions and sessions != {}):
-        send_notification(
-            f"<b>🎟️ PROJECT HAIL MARY IMAX IS NOW LIVE!</b>\n\n"
-            f"📅 Date: {TARGET_DATE}\n"
-            f"📍 Chennai\n\n"
-            f"Go book immediately on District!"
-        )
-        print("✅ IMAX shows detected!")
+        send_notification(f"<b>🎟️ IMAX ALERT - Shows detected on {TARGET_DATE}!</b>")
     else:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Still no IMAX shows yet.")
+        send_notification("Still no shows loaded yet.")
 
 except Exception as e:
-    error_msg = f"⚠️ Error checking District: {str(e)[:150]}"
-    print(error_msg)
-    send_notification(error_msg)
+    send_notification(f"❌ Error: {str(e)[:300]}")
 
-print("✅ Check completed. Next check in ~5 minutes.")
+print("Check finished.")
